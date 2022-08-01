@@ -253,4 +253,21 @@ The UUID of the device will be used to update the /etc/fstab file;
     Results:
     ![](img/mount-a2.png)
 
--
+- Verify your setup by running df -h, output must look like this:
+    ```
+    sudo df -h
+    ```
+    Results:
+    ![](img/df-h2.png)
+
+
+## Prepare the Database Server
+Launch a second RedHat EC2 instance that will have a role – ‘DB Server’
+Repeat the same steps as for the Web Server, but instead of apps-lv create db-lv and mount it to /db directory instead of /var/www/html/.
+
+- ssh into the instance you just created
+    ```
+    ssh -i <your_key_file> ec2-user@<public_ip_address>
+    ```
+    Results:
+    ![](img/ssh-db.png)
