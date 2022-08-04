@@ -427,3 +427,180 @@ Now your db server is ready to go and make other configurations as required.
     ```
     Results:
     ![](img/yum-install.png)
+
+- Start the apache service
+    ```
+    sudo systemctl enable httpd
+    sudo systemctl start httpd
+    ```
+    Results:
+    ![](img/systemctl-enable.png)
+
+- To install PHP and it’s depemdencies
+    ```
+    sudo yum install https://dl.fedoraproject.org/pub/epel/epel-release-latest-8.noarch.rpm
+    sudo yum install yum-utils http://rpms.remirepo.net/enterprise/remi-release-8.rpm
+    sudo yum module list php
+    sudo yum module reset php
+    sudo yum module enable php:remi-7.4
+    sudo yum install php php-opcache php-gd php-curl php-mysqlnd
+    sudo systemctl start php-fpm
+    sudo systemctl enable php-fpm
+    setsebool -P httpd_execmem 1
+    ```
+    Results:
+    ![](img/yum-install2.png)
+
+- Restart Apache
+    ```
+    sudo systemctl restart httpd
+    ```
+    Results:
+    ![](img/systemctl-restart.png)
+
+- Download wordpress and copy wordpress to var/www/html
+    ```
+    mkdir wordpress
+    cd   wordpress
+    sudo wget http://wordpress.org/latest.tar.gz
+    sudo tar xzvf latest.tar.gz
+    sudo rm -rf latest.tar.gz
+    cp wordpress/wp-config-sample.php wordpress/wp-config.php
+    cp -R wordpress /var/www/html/
+    ```
+    Results:
+    ![](img/wordpress.png)
+
+- Configure SELinux Policies
+    ```
+    sudo chown -R apache:apache /var/www/html/wordpress
+    sudo chcon -t httpd_sys_rw_content_t /var/www/html/wordpress -R
+    sudo setsebool -P httpd_can_network_connect=1
+    ```
+    Results:
+    ![](img/selinux.png)
+
+## Install MySQL on your DB Server EC2
+- Install mysql on the db-server
+    ```
+    sudo yum update
+    sudo yum install mysql-server
+    ```
+    Results:
+    ![](img/yum-update2.png)
+
+- We now need to verify that the service is up and running by using sudo systemctl status mysqld, if it is not running, restart the service and enable it so it will be running even after reboot:
+    ```
+    sudo systemctl restart mysqld
+    sudo systemctl enable mysqld
+    ```
+    Results:
+    ![](img/systemctl-restart2.png)
+
+## Configuring the DB to work with WordPress
+Here we need to configure the database to work with WordPress. By allowing the wordpress server be able to connect to the database, we need to configure the database to allow the wordpress server to connect to the database.
+- Get the ip-address of the wordpress server
+    ```
+    curl http://checkip.amazonaws.com
+    ```
+    Results:
+    ![](img/curl.png)
+- We need to then create a user for the wordpress server to connect to the database.
+    ```
+    sudo mysql
+    CREATE DATABASE wordpress;
+    CREATE USER `myuser`@`<Web-Server-Private-IP-Address>` IDENTIFIED BY 'mypass';
+    GRANT ALL ON wordpress.* TO 'myuser'@'<Web-Server-Private-IP-Address>';
+    FLUSH PRIVILEGES;
+    SHOW DATABASES;
+    exit
+    ```
+    Results:
+    ![](img/mysql-root.png)
+
+
+## Configure WordPress to connect to remote database.
+Here we are to open MySQL port 3306 on DB Server EC2. For extra security, you shall allow access to the DB server ONLY from your Web Server’s IP address, so in the Inbound Rule configuration specify source as /32.
+- Install MySQL client and test that you can connect from your Web Server to your DB server by using mysql-client
+    ```
+    sudo yum install mysql
+    ```
+    Results:
+    ![](img/mysql-client.png)
+    - Create login to the database on the db server
+    ```
+    sudo mysql -u <user> -p -h <DB-Server-Private-IP-address>
+    ```
+    Note the <user> is the name of the user you created in mysql server on the db server.
+    Results:
+    ![](img/mysql-admin.png)
+
+- Verify if you can successfully execute SHOW DATABASES; command and see a list of existing databases.
+    ```
+    SHOW DATABASES;
+    ```
+    Results:
+    ![](img/mysql-show-databases.png)
+
+- Change permissions and configuration so Apache could use WordPress:
+Here we need to create a configuration file for wordpress in order to point client requests to the wordpress directory.
+    ```
+    sudo nano /etc/httpd/conf.d/wordpress.conf
+    ```
+    and copy and paste the lines below:
+    ```
+    <VirtualHost *:80>
+    ServerAdmin myuser@3.88.215.221
+    DocumentRoot /var/www/html/wordpress
+
+    <Directory "/var/www/html/wordpress">
+    Options Indexes FollowSymLinks
+    AllowOverride all
+    Require all granted
+    </Directory>
+
+    ErrorLog /var/log/httpd/wordpress_error.log
+    CustomLog /var/log/httpd/wordpress_access.log common
+    </VirtualHost>
+    ```
+    Results:
+    ![](img/nano-wordpress.png)
+
+- To apply the changes, restart Apache
+    ```
+    sudo systemctl restart httpd
+    ```
+    Results:
+    ![](img/systemctl-restart3.png)
+
+- Edit the wp-config file 
+    ```
+    sudo nano /var/www/html/wordpress/wp-config.php
+    ```
+    and add the following lines:
+    ```
+    define('DB_NAME', 'wordpress');
+    define('DB_USER', 'myuser');
+    define('DB_PASSWORD', 'mypass');
+    define('DB_HOST', '<db-Server-Private-IP-Address>');
+    define('DB_CHARSET', 'utf8mb4');
+    define('DB_COLLATE', '');
+    ```
+    Results:
+    ![](img/wordpress-config.png)
+
+- configure SELinux for wordpress
+    ```
+    sudo semanage fcontext -a -t httpd_sys_rw_content_t "/var/www/html/wordpress/.*?"
+    ```
+    <b>Note:</b> The semanage command is not available on CentOS 7.x.x. and you might need to install it using the following command:
+    ```
+    sudo yum provides /usr/sbin/semanage
+    sudo yum install policycoreutils-python-utils
+    ```
+    Results:
+    ![](img/selinux-wordpress.png)
+
+- Try to access from your browser the link to your WordPress http://<Web-Server-Public-IP-Address>/
+    Results:
+    ![](img/working.png)
